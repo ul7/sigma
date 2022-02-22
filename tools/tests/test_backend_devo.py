@@ -190,7 +190,11 @@ class TestDevoBackend(unittest.TestCase):
         # Arrange
         detection = {"selection1": {"fieldname1|re": "([0-9]|[1-9][0-9]|[1-4][0-9]{2})"},
                      "condition": "selection1"}
-        expected_result = 'from ' + self.table + ' where matches(fieldname1, re(\"([0-9]|[1-9][0-9]|[1-4][0-9]{2})\")) select *'
+        expected_result = (
+            f'from {self.table}'
+            + ' where matches(fieldname1, re(\"([0-9]|[1-9][0-9]|[1-4][0-9]{2})\")) select *'
+        )
+
 
         # Act & Assert
         self.validate(detection, expected_result)
@@ -199,8 +203,11 @@ class TestDevoBackend(unittest.TestCase):
         # Arrange
         detection = {"selection1": {"select func(fieldname1) as fieldname1": "value1"},
                      "condition": "selection1"}
-        expected_result = 'from ' + self.table + \
-                          ' select func(fieldname1) as fieldname1 where fieldname1 = "value1" select *'
+        expected_result = (
+            f'from {self.table}'
+            + ' select func(fieldname1) as fieldname1 where fieldname1 = "value1" select *'
+        )
+
         # Act & Assert
         self.validate(detection, expected_result)
 

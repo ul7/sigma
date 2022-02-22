@@ -22,7 +22,7 @@ def getAllSubclasses(path, import_base, base_class):
     classes = set()
     for finder, name, ispkg in pkgutil.iter_modules([ path ]):
         module = importlib.import_module(".{}.{}".format(import_base, name), __package__)
-        for name, cls in vars(module).items():
+        for cls in vars(module).values():
             if type(cls) == type and issubclass(cls, base_class) and cls.active:
                 classes.add(cls)
     return classes

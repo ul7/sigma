@@ -57,10 +57,7 @@ class PowerShellBackend(SingleTextQueryBackend):
             before = self.generateBefore(parsed)
             after = self.generateAfter(parsed)
 
-            result = ""
-
-            if before is not None:
-                result = before
+            result = before if before is not None else ""
             if query is not None:
                 result += query
             if after is not None:
@@ -74,9 +71,7 @@ class PowerShellBackend(SingleTextQueryBackend):
         return "Get-WinEvent | where {"
 
     def generateAfter(self, parsed):
-        if self.csv:
-            return " | ConvertTo-CSV -NoTypeInformation"
-        return ""
+        return " | ConvertTo-CSV -NoTypeInformation" if self.csv else ""
 
     def generateNode(self, node):
         if type(node) == sigma.parser.condition.ConditionAND:
@@ -104,11 +99,11 @@ class PowerShellBackend(SingleTextQueryBackend):
         result = self.generateNode(parsed.parsedSearch)
         self.parsedlogsource = sigmaparser.get_logsource().service
 
-        powershellPrefix = ""
         if parsed.parsedAgg:
             powershellSuffixAgg = self.generateAggregation(parsed.parsedAgg)
             result = result + " } " + powershellSuffixAgg
         else:
+            powershellPrefix = ""
             result = powershellPrefix + result + " } | select TimeCreated,Id,RecordId,ProcessId,MachineName,Message"
         return result
 
@@ -138,7 +133,7 @@ class PowerShellBackend(SingleTextQueryBackend):
             raise TypeError("Backend does not support map values of type " + str(type(value)))
 
     def generateMapItemListNode(self, key, value):
-        itemslist = list()
+        itemslist = []
         for item in value:
             if key in self.fieldMappings.keys():
                 key = self.fieldMappings[key]
@@ -155,8 +150,7 @@ class PowerShellBackend(SingleTextQueryBackend):
 
     def generateANDNode(self, node):
         generated = [ self.generateNode(val) for val in node ]
-        filtered = [ g for g in generated if g is not None ]
-        if filtered:
+        if filtered := [g for g in generated if g is not None]:
             return self.andToken.join(filtered)
         else:
             return None
@@ -176,22 +170,18 @@ class PowerShellBackend(SingleTextQueryBackend):
             return "-eq"
 
     def generateAggregation(self, agg):
-        if agg == None:
+        if agg is None:
             return ""
         if agg.aggfunc != sigma.parser.condition.SigmaAggregationParser.AGGFUNC_COUNT:
             raise NotImplementedError("Only COUNT aggregation function is implemented for this backend")
-        if agg.aggfunc == sigma.parser.condition.SigmaAggregationParser.AGGFUNC_NEAR:
-            # python .\tools\sigmac -t splunk -c .\tools\config\splunk-windows-all.yml -r .\rules\windows\builtin\
-            # Example rule: .\sigma\rules\windows\builtin\win_susp_samr_pwset.yml
-            raise NotImplementedError("The 'near' aggregation operator is not yet implemented for this backend")
-        if agg.groupfield == None:
+        if agg.groupfield is None:
             # Example rule: .\sigma\rules\windows\builtin\win_multiple_suspicious_cli.yml
             powershell_cond_op = self.getPowerShellCondOp(agg.cond_op)
             return " | group-object %s | where { $_.count %s %s } | select name,count | sort -desc" % (agg.aggfield or "", powershell_cond_op, agg.condition)
         else:
             # Example rule: .\sigma\rules\windows\other\win_rare_schtask_creation.yml
             powershell_cond_op = self.getPowerShellCondOp(agg.cond_op)
-            if (agg.aggfield == None):
+            if agg.aggfield is None:
                 return " | group-object %s | where { $_.count %s %s } | select name,count | sort -desc" % (agg.groupfield or "", powershell_cond_op, agg.condition)
             else:
                 return " | select %s, %s | group %s | foreach { [PSCustomObject]@{'%s'=$_.name;'Count'=($_.group.%s | sort -u).count} }  | sort count -desc | where { $_.count %s %s }" % (agg.groupfield, agg.aggfield, agg.groupfield, agg.groupfield, agg.aggfield, powershell_cond_op, agg.condition)

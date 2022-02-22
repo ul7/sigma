@@ -38,9 +38,12 @@ def get_technique_id(obj):
     return obj.get('technique_id')
 
 def revoked_or_deprecated(entry):
-    if "revoked" in entry.keys() and entry['revoked'] or "x_mitre_deprecated" in entry.keys() and entry['x_mitre_deprecated']:
-        return True
-    return False
+    return bool(
+        "revoked" in entry.keys()
+        and entry['revoked']
+        or "x_mitre_deprecated" in entry.keys()
+        and entry['x_mitre_deprecated']
+    )
 
 for url in mitre_update_urls:
     with urllib.request.urlopen(url) as cti_json:
@@ -53,7 +56,9 @@ for url in mitre_update_urls:
 
         # Map the tatics
         for entry in mitre_json['objects']:
-            if not entry['type'] == "x-mitre-tactic" or revoked_or_deprecated(entry):
+            if entry['type'] != "x-mitre-tactic" or revoked_or_deprecated(
+                entry
+            ):
                 continue
             for ref in entry['external_references']:
                 if ref['source_name'] in mitre_source_types:
@@ -67,19 +72,21 @@ for url in mitre_update_urls:
 
         # Map the techniques
         for entry in mitre_json['objects']:
-            if not entry['type'] == "attack-pattern" or revoked_or_deprecated(entry):
+            if entry['type'] != "attack-pattern" or revoked_or_deprecated(
+                entry
+            ):
                 continue
             if "x_mitre_is_subtechnique" in entry.keys() and entry['x_mitre_is_subtechnique']:
                 continue
             for ref in entry['external_references']:
                 if ref['source_name'] in mitre_source_types:
                     technique_map[ref['external_id']] = entry['name']
-                    sub_tactics = []
-                    # Get Mitre Tactics (Kill-Chains)
-                    for tactic in entry['kill_chain_phases']:
-                        if tactic['kill_chain_name'] in mitre_source_types:
-                            # Map the short phase_name to tactic name
-                            sub_tactics.append(tactic_map[tactic['phase_name']])
+                    sub_tactics = [
+                        tactic_map[tactic['phase_name']]
+                        for tactic in entry['kill_chain_phases']
+                        if tactic['kill_chain_name'] in mitre_source_types
+                    ]
+
                     techniques.append({
                         "technique_id": ref['external_id'],
                         "technique": entry['name'],
@@ -90,7 +97,9 @@ for url in mitre_update_urls:
 
         ## Map the sub-techniques
         for entry in mitre_json['objects']:
-            if not entry['type'] == "attack-pattern" or revoked_or_deprecated(entry):
+            if entry['type'] != "attack-pattern" or revoked_or_deprecated(
+                entry
+            ):
                 continue
             if "x_mitre_is_subtechnique" in entry.keys() and entry['x_mitre_is_subtechnique']:
                 for ref in entry['external_references']:

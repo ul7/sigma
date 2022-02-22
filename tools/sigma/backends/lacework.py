@@ -292,10 +292,9 @@ class LaceworkBackend(SingleTextQueryBackend):
             return f"{transformed_fieldname} LIKE {new_value}"
         if isinstance(value, (str, int)):
             return self.mapExpression % (transformed_fieldname, self.generateNode(value))
-        # mapListsHandling
         elif type(value) == list:
             # if a list contains values with wildcards we can't use standard handling ("in")
-            if any([x for x in value if x.startswith('*') or x.endswith('*')]):
+            if any(x for x in value if x.startswith('*') or x.endswith('*')):
                 node = ConditionOR(None, None, *[(transformed_fieldname, x) for x in value])
                 return self.generateNode(node)
             return self.generateMapItemListNode(transformed_fieldname, value)
@@ -562,12 +561,12 @@ class LaceworkQuery:
     def get_evaluator_id(logsource_name, logsource_config):
         # 3. validate service has an evaluatorId mapping
         evaluator_id = safe_get(logsource_config, 'evaluatorId', str)
-        return evaluator_id if evaluator_id else None
+        return evaluator_id or None
 
     @staticmethod
     def get_eval_frequency(logsource_name, logsource_config):
         eval_frequency = safe_get(logsource_config, 'evalFrequency', str)
-        return eval_frequency if eval_frequency else LaceworkQuery.DEFAULT_EVAL_FREQUENCY
+        return eval_frequency or LaceworkQuery.DEFAULT_EVAL_FREQUENCY
 
     @staticmethod
     def get_query_id(rule):
@@ -611,9 +610,7 @@ class LaceworkQuery:
             before = backend.generateBefore(parsed)
             after = backend.generateAfter(parsed)
 
-            filter = ""
-            if before is not None:
-                filter = before
+            filter = before if before is not None else ""
             if query is not None:
                 filter += query
             if after is not None:

@@ -244,18 +244,9 @@ def get_parser_properties(sigmaparser):
     description = sigmaparser.parsedyaml['description']
     condition = sigmaparser.parsedyaml['detection']['condition']
     logsource = sigmaparser.parsedyaml['logsource']
-    category = ''
-    if 'category' in logsource:
-        category = logsource['category'].lower()
-
-    product = ''
-    if 'product' in logsource:
-        product = logsource['product'].lower()
-
-    service = ''
-    if 'service' in logsource:
-        service = logsource['service'].lower()
-
+    category = logsource['category'].lower() if 'category' in logsource else ''
+    product = logsource['product'].lower() if 'product' in logsource else ''
+    service = logsource['service'].lower() if 'service' in logsource else ''
     return product, category, service, title, level, condition, description
 
 
@@ -395,10 +386,12 @@ class uberAgentBackend(SingleTextQueryBackend):
     def fieldNameMapping(self, fieldname, value):
         key = fieldname.lower()
 
-        if self.current_category is not None:
-            if self.current_category in self.fieldMappingPerCategory:
-                if key in self.fieldMappingPerCategory[self.current_category]:
-                    return self.fieldMappingPerCategory[self.current_category][key]
+        if (
+            self.current_category is not None
+            and self.current_category in self.fieldMappingPerCategory
+            and key in self.fieldMappingPerCategory[self.current_category]
+        ):
+            return self.fieldMappingPerCategory[self.current_category][key]
 
         if key not in self.fieldMapping:
             if key in self.ignoreFieldList:
@@ -458,10 +451,10 @@ class uberAgentBackend(SingleTextQueryBackend):
             write_file_header(file, level)
             for rule in self.rules:
                 try:
-                    serialized_rule = str(rule)
                     if rule.sigma_level == level:
+                        serialized_rule = str(rule)
                         file.write(serialized_rule + "\n")
-                        count = count + 1
+                        count += 1
                 except MalformedRuleException:
                     continue
             file.close()

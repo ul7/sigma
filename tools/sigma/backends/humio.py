@@ -62,43 +62,39 @@ class HumioBackend(SingleTextQueryBackend):
 
     def generateANDNode(self, node):
         generated = [self.generateNode(val) for val in node]
-        filtered = [g for g in generated if g is not None]
-        if filtered:
-            if self.sort_condition_lists:
-                filtered = sorted(filtered)
-            if any([item for item in filtered if "regex" in item]):
-                res = ""
-                for item in filtered:
-                    if item.startswith("regex"):
-                        if res.endswith(" | "):
-                            res = res.rstrip(" | ")
-                        res += " | %s | " % item.strip(" | ")
-                    else:
-                        res += item
-                return res.strip(" | ")
-            return self.andToken.join(filtered)
-        else:
+        if not (filtered := [g for g in generated if g is not None]):
             return None
+        if self.sort_condition_lists:
+            filtered = sorted(filtered)
+        if any(item for item in filtered if "regex" in item):
+            res = ""
+            for item in filtered:
+                if item.startswith("regex"):
+                    if res.endswith(" | "):
+                        res = res.rstrip(" | ")
+                    res += " | %s | " % item.strip(" | ")
+                else:
+                    res += item
+            return res.strip(" | ")
+        return self.andToken.join(filtered)
 
     def generateORNode(self, node):
         generated = [self.generateNode(val) for val in node]
-        filtered = [g.strip(" | ") for g in generated if g is not None]
-        if filtered:
-            if self.sort_condition_lists:
-                filtered = sorted(filtered)
-            if any([item for item in filtered if "regex" in item]):
-                res = ""
-                for item in filtered:
-                    if item.startswith("regex"):
-                        if res.endswith(" | "):
-                            res = res.rstrip(" | ")
-                        res += " | %s | " % item.strip(" | ")
-                    else:
-                        res += item
-                return res.strip(" | ")
-            return self.orToken.join(filtered)
-        else:
+        if not (filtered := [g.strip(" | ") for g in generated if g is not None]):
             return None
+        if self.sort_condition_lists:
+            filtered = sorted(filtered)
+        if any(item for item in filtered if "regex" in item):
+            res = ""
+            for item in filtered:
+                if item.startswith("regex"):
+                    if res.endswith(" | "):
+                        res = res.rstrip(" | ")
+                    res += " | %s | " % item.strip(" | ")
+                else:
+                    res += item
+            return res.strip(" | ")
+        return self.orToken.join(filtered)
 
     def cleanValue(self, val):
         if isinstance(val, SigmaRegularExpressionModifier):
@@ -115,7 +111,7 @@ class HumioBackend(SingleTextQueryBackend):
             return {'regexp': {key_mapped: str(value)}}
         # if any([item for item in value if "*" in item]):
         #     return (" | " + " | ".join([self.regexExpression % (key, self.cleanValue(item)) for item in value]) + " | ")
-        if not set([type(val) for val in value]).issubset({str, int}):
+        if not {type(val) for val in value}.issubset({str, int}):
             raise TypeError("List values must be strings or numbers")
         return " or ".join(['%s=%s' % (key, self.generateValueNode(item)) for item in value])
 

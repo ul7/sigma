@@ -64,7 +64,7 @@ class SplunkDMBackend(SingleTextQueryBackend):
             self.dataset = self.backend_options['dataset']
         except:
             try:
-               self.datamodel, self.dataset = self.resolveDatamodel(sigmaparser)
+                self.datamodel, self.dataset = self.resolveDatamodel(sigmaparser)
             except:
                 try:
                     datamodel_resolution = self.backend_options['datamodel_resolution']
@@ -72,8 +72,6 @@ class SplunkDMBackend(SingleTextQueryBackend):
                     datamodel_resolution = "default"
                 if datamodel_resolution == "debug":
                     raise Exception("[!] Failure to convert sigma rule: Backend is unable to automatically find a Datamodel for the target sigma rule, you may try to explicit one with the backend options")
-                else:
-                    pass
 
     def loadDatamodel(self):
         try:
@@ -112,50 +110,50 @@ class SplunkDMBackend(SingleTextQueryBackend):
             newfields = []
             for field in sigmaparser.parsedyaml['fields']:
                 field = self.normalizeField(field)
-                newfields.append(dataset + '.' + field)
+                newfields.append(f'{dataset}.{field}')
             sigmaparser.parsedyaml.update({'fields': newfields})
 
         newdetection = {}
         for subkey in sigmaparser.parsedyaml['detection']:
-            newdetection.update({subkey: {}})
+            newdetection[subkey] = {}
             if subkey != 'condition':
                 for field in sigmaparser.parsedyaml['detection'][subkey]:
                     nativefield = field.split("|", 1)[0]
                     newfield = self.normalizeField(nativefield)
-                    newfield = dataset + '.' + newfield
+                    newfield = f'{dataset}.{newfield}'
                     try:
                         commands = field.split("|", 1)[1]
-                        newfield = newfield + '|' + commands
+                        newfield = f'{newfield}|{commands}'
                     except:
                         pass
                     values = sigmaparser.parsedyaml['detection'][subkey][field]
                     newdetection[subkey].update({newfield: values})
             else:
-                    newdetection[subkey] = sigmaparser.parsedyaml['detection'][subkey]
+                newdetection[subkey] = sigmaparser.parsedyaml['detection'][subkey]
         sigmaparser.parsedyaml.update({'detection': newdetection})
         sigmaparser.parse_sigma()
         return sigmaparser
 
     def generateMapItemListNode(self, key, value):
-        if not set([type(val) for val in value]).issubset({str, int}):
+        if not {type(val) for val in value}.issubset({str, int}):
             raise TypeError("List values must be strings or numbers")
         return "(" + (" OR ".join(['%s=%s' % (key, self.generateValueNode(item)) for item in value])) + ")"
 
     def generateAggregationAlt(self, agg):
-        if agg == None:
+        if agg is None:
             return ""
         if agg.aggfunc == sigma.parser.condition.SigmaAggregationParser.AGGFUNC_NEAR:
             raise NotImplementedError("The 'near' aggregation operator is not yet implemented for this backend")
-        if agg.groupfield == None:
+        if agg.groupfield is None:
             if agg.aggfunc_notrans == 'count':
-                if agg.aggfield == None :
+                if agg.aggfield is None:
                     return " | eventstats count as val | search val %s %s" % (agg.cond_op, agg.condition)
                 else:
                     agg.aggfunc_notrans = 'dc'
             return " | eventstats %s(%s) as val | search val %s %s" % (agg.aggfunc_notrans, agg.aggfield or "", agg.cond_op, agg.condition)
         else:
             if agg.aggfunc_notrans == 'count':
-                if agg.aggfield == None :
+                if agg.aggfield is None:
                     return " | eventstats count as val by %s| search val %s %s" % (agg.groupfield, agg.cond_op, agg.condition)
                 else:
                     agg.aggfunc_notrans = 'dc'
@@ -178,12 +176,11 @@ class SplunkDMBackend(SingleTextQueryBackend):
         return before
 
     def generateBeforeAlt(self, sigmaparser):
-        before = ""
-        return before
+        return ""
 
     def generateAlt(self, sigmaparser):
         self.generate_mode = "Alternative"
-        columns = list()
+        columns = []
         mapped =None
         try:
             for field in sigmaparser.parsedyaml["fields"]:
@@ -196,20 +193,16 @@ class SplunkDMBackend(SingleTextQueryBackend):
                     raise TypeError("Field mapping must return string or list")
 
             fields = ",".join(str(x) for x in columns)
-            fields = " | table " + fields
+            fields = f' | table {fields}'
 
-        except KeyError:    # no 'fields' attribute
+        except KeyError:# no 'fields' attribute
             mapped = None
-            pass
-
         for parsed in sigmaparser.condparsed:
             query = self.generateQuery(parsed)
             before = self.generateBeforeAlt(parsed)
             after = self.generateAfter(parsed)
 
-            result = ""
-            if before is not None:
-                result = before
+            result = before if before is not None else ""
             if query is not None:
                 result += query
             if after is not None:
@@ -222,7 +215,7 @@ class SplunkDMBackend(SingleTextQueryBackend):
     def generateDM(self, sigmaparser):
         """Method is called for each sigma rule and receives the parsed rule (SigmaParser)"""
         self.generate_mode = "Datamodel"
-        columns = list()
+        columns = []
         mapped =None
         sigmaparser = self.applyNormalization(sigmaparser)
         try:
@@ -236,19 +229,15 @@ class SplunkDMBackend(SingleTextQueryBackend):
                     raise TypeError("Field mapping must return string or list")
 
             fields = " ".join(str(x) for x in columns)
-            fields = " by " + fields
+            fields = f' by {fields}'
 
-        except KeyError:    # no 'fields' attribute
+        except KeyError:# no 'fields' attribute
             mapped = None
-            pass
-
         for parsed in sigmaparser.condparsed:
             query = self.generateQuery(parsed)
             before = self.generateBefore(parsed)
             after = self.generateAfter(parsed)
-            result = ""
-            if before is not None:
-                result = before
+            result = before if before is not None else ""
             if query is not None:
                 result += query
             if after is not None:

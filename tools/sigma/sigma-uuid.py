@@ -37,8 +37,8 @@ for path in paths:
     with path.open("r") as f:
         rules = list(yaml.safe_load_all(f))
 
+    i = 1
     if args.verify:
-        i = 1
         for rule in rules:
             if "title" in rule:     # Rule with a title should also have a UUID
                 try:
@@ -51,12 +51,11 @@ for path in paths:
                     passed = False
             i += 1
     else:
-        newrules = list()
+        newrules = []
         changed = False
-        i = 1
         for rule in rules:
             if "title" in rule and "id" not in rule:    # only assign id to rules that have a title and no id
-                newrule = dict()
+                newrule = {}
                 changed = True
                 for k, v in rule.items():
                     newrule[k] = v

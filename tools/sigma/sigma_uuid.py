@@ -35,10 +35,7 @@ def valid_id(rule,i,path):
     return True 
 
 def is_global(rule):
-    if 'action' in rule:
-        if rule['action'] == 'global':
-            return True
-    return False
+    return 'action' in rule and rule['action'] == 'global'
 
 def main():
     argparser = ArgumentParser(description="Assign and verify UUIDs of Sigma rules")
@@ -62,47 +59,40 @@ def main():
         print_verbose("Rule {}".format(str(path)))
         with path.open("r",encoding="UTF-8") as f:
             rules = list(ruamel.yaml.load_all(f,Loader=ruamel.yaml.RoundTripLoader))
-        
+
         if args.verify:
-            i = 0
-            for rule in rules:
+            for i, rule in enumerate(rules):
                 if is_global(rule): # No id in global section
                     if 'id' in rule:
                         passed = False
                         print("Rule {} in file {} has ID in global section.".format(i,str(path)))
-                else:
-                    if not valid_id(rule,i,path):
-                        passed = False
-                i += 1
+                elif not valid_id(rule,i,path):
+                    passed = False
         else:
             changed = False
-            i = 1
-            for rule in rules:
+            for i, rule in enumerate(rules, start=1):
                 if is_global(rule):
                     if 'id' in rule:
                         uuid = rule['id']
                         del rule['id']
                         print("Remove Global UUID '{}' to rule {} in file {}.".format(str(uuid), i, str(path)))
                         changed = True
-                else:
-                    if 'id' in rule:
-                        if not valid_id(rule,i,path):
-                            uuid = uuid4()
-                            rule['id'] = str(uuid)
-                            changed = True
-                            print("Change bad UUID '{}' to rule {} in file {}.".format(str(uuid), i, str(path)))
-                    else:
-                        pos= 1 if 'title' in rule else 0 #put id in after title is need 
+                elif 'id' in rule:
+                    if not valid_id(rule,i,path):
                         uuid = uuid4()
-                        rule.insert(pos,"id",str(uuid))
+                        rule['id'] = str(uuid)
                         changed = True
-                        print("Assigned UUID '{}' to rule {} in file {}.".format(str(uuid), i, str(path))) 
-                i += 1
-
+                        print("Change bad UUID '{}' to rule {} in file {}.".format(str(uuid), i, str(path)))
+                else:
+                    pos= 1 if 'title' in rule else 0 #put id in after title is need 
+                    uuid = uuid4()
+                    rule.insert(pos,"id",str(uuid))
+                    changed = True
+                    print("Assigned UUID '{}' to rule {} in file {}.".format(str(uuid), i, str(path)))
             if changed:
                 with path.open("w") as f:
                     for rule in rules:
-                        start= False if is_global(rule) else True
+                        start = not is_global(rule)
                         if len(rules) == 1: start= False # avoid --- if only one rule 
                         ruamel.yaml.round_trip_dump(rule,stream=f,indent=4,block_seq_indent=4,explicit_start=start)
 

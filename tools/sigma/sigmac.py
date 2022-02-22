@@ -84,7 +84,7 @@ class ActionBackendHelp(argparse.Action):
     def __call__(self, parser, ns, vals, opt):
         backend = backends.getBackend(vals)
         if len(backend.options) > 0:
-            helptext = "Backend options for " + backend.identifier + "\n"
+            helptext = f'Backend options for {backend.identifier}' + "\n"
             for option, default, help, _ in backend.options:
                 helptext += "    {:10}: {} (default: {})".format(option, help, default) + "\n"
 

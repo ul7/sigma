@@ -55,7 +55,7 @@ class ArcSightBackend(SingleTextQueryBackend):
         search_ptrn = re.compile(r"[\/\\@?#&_%*',\(\)\" ]")
         replace_ptrn = re.compile(r"[ \/\\@?#&_%*',\(\)\" ]")
         match = search_ptrn.search(str(node))
-        new_node = list()
+        new_node = []
         if match:
             replaced_str = replace_ptrn.sub('*', node)
             node = [x for x in replaced_str.split('*') if x]
@@ -68,58 +68,39 @@ class ArcSightBackend(SingleTextQueryBackend):
     # Clearing values from special characters.
     def generateMapItemNode(self, node):
         key, value = node
-        if key in self.allowedFieldsList:
-            if self.mapListsSpecialHandling == False and type(value) in (
+        if self.mapListsSpecialHandling == False and type(value) in (
                     str, int, list) or self.mapListsSpecialHandling == True and type(value) in (str, int):
+            if key in self.allowedFieldsList:
                 return self.mapExpression % (key, self.generateCleanValueNodeLogsource(value))
-            elif type(value) is list:
-                return self.generateMapItemListNode(key, value)
+            if type(value) is not str:
+                return self.generateValueNode(value)
+            new_value = []
+            value = self.CleanNode(value)
+            if type(value) == list:
+                new_value.append(self.andToken.join([self.valueExpression % val for val in value]))
             else:
-                raise TypeError("Backend does not support map values of type " + str(type(value)))
+                new_value.append(value)
+            if len(new_value)==1:
+                return f'({self.generateANDNode(new_value)})'
+            else:
+                return f'({self.generateORNode(new_value)})'
+        elif type(value) is list:
+            return self.generateMapItemListNode(key, value)
         else:
-            if self.mapListsSpecialHandling == False and type(value) in (
-                    str, int, list) or self.mapListsSpecialHandling == True and type(value) in (str, int):
-                if type(value) is str:
-                    new_value = list()
-                    value = self.CleanNode(value)
-                    if type(value) == list:
-                        new_value.append(self.andToken.join([self.valueExpression % val for val in value]))
-                    else:
-                        new_value.append(value)
-                    if len(new_value)==1:
-                        return "(" + self.generateANDNode(new_value) + ")"
-                    else:
-                        return "(" + self.generateORNode(new_value) + ")"
-                else:
-                    return self.generateValueNode(value)
-            elif type(value) is list:
-                new_value = list()
-                for item in value:
-                    item = self.CleanNode(item)
-                    if type(item) is list and len(item) == 1:
-                        new_value.append(self.valueExpression % item[0])
-                    elif type(item) is list:
-                        new_value.append(self.andToken.join([self.valueExpression % val for val in item]))
-                    else:
-                        new_value.append(item)
-                return self.generateORNode(new_value)
-            elif value is None:
-                return self.nullExpression % (key, )
-            else:
-                raise TypeError("Backend does not support map values of type " + str(type(value)))
+            raise TypeError("Backend does not support map values of type " + str(type(value)))
 
     # for keywords values with space
     def generateValueNode(self, node):
         if type(node) is int:
             return self.cleanValue(str(node))
         if 'AND' in node:
-            return "(" + self.cleanValue(str(node)) + ")"
+            return f'({self.cleanValue(str(node))})'
         else:
             return self.cleanValue(str(node))
 
     # collect elements of Arcsight search using OR
     def generateMapItemListNode(self, key, value):
-        itemslist = list()
+        itemslist = []
         for item in value:
             if key in self.allowedFieldsList:
                 itemslist.append('%s = %s' % (key, self.generateValueNode(item)))
@@ -141,7 +122,7 @@ class ArcSightBackend(SingleTextQueryBackend):
     # generateORNode algorithm for ArcSightBackend class.
     def generateORNode(self, node):
         if type(node) == ConditionOR and all(isinstance(item, str) for item in node):
-            new_value = list()
+            new_value = []
             for value in node:
                 value = self.CleanNode(value)
                 if type(value) is list:
@@ -149,7 +130,7 @@ class ArcSightBackend(SingleTextQueryBackend):
                 else:
                     new_value.append(value)
             return "(" + self.orToken.join([self.generateNode(val) for val in new_value]) + ")"
-        return "(" + self.orToken.join([self.generateNode(val) for val in node]) + ")"
+        return f'({self.orToken.join([self.generateNode(val) for val in node])})'
 
 class ArcSightESMBackend(SingleTextQueryBackend):
     """Converts Sigma rule into ArcSight ESM saved search. Contributed by SOC Prime. https://socprime.com"""
@@ -224,18 +205,17 @@ class ArcSightESMBackend(SingleTextQueryBackend):
                 else:
                     return self.mapExpression % (key, self.generateValueNode(value))
             elif isinstance(value, list):
-                new_value = list()
+                new_value = []
                 for item in value:
                     item = self.CleanNode(item)
                     if type(item) is list and len(item) == 1:
                         new_value.append( self.containsExpression % (key, item[0]))
                     elif type(item) is list:
                         new_value.append(self.andToken.join([self.valueExpression % val for val in item]))
+                    elif isinstance(item, str) and (item.startswith("*") or item.endswith("*")):
+                        new_value.append(self.containsExpression % (key, self.generateValueNode(self.cleanValue(item))))
                     else:
-                        if isinstance(item, str) and (item.startswith("*") or item.endswith("*")):
-                            new_value.append(self.containsExpression % (key, self.generateValueNode(self.cleanValue(item))))
-                        else:
-                            new_value.append(self.mapExpression %(key, self.cleanValue(item)))
+                        new_value.append(self.mapExpression %(key, self.cleanValue(item)))
                 return self.generateORNode(new_value)
             elif value is None:
                 return self.nullExpression % (key, )
@@ -247,13 +227,13 @@ class ArcSightESMBackend(SingleTextQueryBackend):
         if type(node) is int:
             return self.cleanValue(str(node))
         if 'AND' in node:
-            return "(" + self.cleanValue(str(node)) + ")"
+            return f'({self.cleanValue(str(node))})'
         else:
             return self.valueExpression % (self.cleanValue(str(node)))
 
     # collect elements of Arcsight search using OR
     def generateMapItemListNode(self, key, value):
-        itemslist = list()
+        itemslist = []
         for item in value:
             if isinstance(item, str) and (item.startswith("*") or item.endswith("*")):
                 itemslist.append(self.containsExpression % (
@@ -277,7 +257,7 @@ class ArcSightESMBackend(SingleTextQueryBackend):
     # generateORNode algorithm for ArcSightBackend class.
     def generateORNode(self, node):
         if type(node) == ConditionOR and all(isinstance(item, str) for item in node):
-            new_value = list()
+            new_value = []
             for value in node:
                 value = self.CleanNode(value)
                 if type(value) is list:
@@ -286,6 +266,6 @@ class ArcSightESMBackend(SingleTextQueryBackend):
                     new_value.append(value)
             return "(" + self.orToken.join([self.generateNode(val) for val in new_value]) + ")"
         elif isinstance(node, list) and all(isinstance(item, str) for item in node):
-            return "(" + self.orToken.join([val for val in node]) + ")"
+            return f'({self.orToken.join(list(node))})'
         else:
             return "(" + self.orToken.join([self.generateNode(val) for val in node]) + ")"

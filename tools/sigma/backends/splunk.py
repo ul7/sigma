@@ -44,25 +44,25 @@ class SplunkBackend(SingleTextQueryBackend):
     mapListValueExpression = "%s IN %s"
 
     def generateMapItemListNode(self, key, value):
-        if not set([type(val) for val in value]).issubset({str, int}):
+        if not {type(val) for val in value}.issubset({str, int}):
             raise TypeError("List values must be strings or numbers")
         return "(" + (" OR ".join(['%s=%s' % (key, self.generateValueNode(item)) for item in value])) + ")"
 
     def generateAggregation(self, agg):
-        if agg == None:
+        if agg is None:
             return ""
         if agg.aggfunc == sigma.parser.condition.SigmaAggregationParser.AGGFUNC_NEAR:
             raise NotImplementedError("The 'near' aggregation operator is not yet implemented for this backend")
-        if agg.groupfield == None:
+        if agg.groupfield is None:
             if agg.aggfunc_notrans == 'count':
-                if agg.aggfield == None :
+                if agg.aggfield is None:
                     return " | eventstats count as val | search val %s %s" % (agg.cond_op, agg.condition)
                 else:
                     agg.aggfunc_notrans = 'dc'
             return " | eventstats %s(%s) as val | search val %s %s" % (agg.aggfunc_notrans, agg.aggfield or "", agg.cond_op, agg.condition)
         else:
             if agg.aggfunc_notrans == 'count':
-                if agg.aggfield == None :
+                if agg.aggfield is None:
                     return " | eventstats count as val by %s| search val %s %s" % (agg.groupfield, agg.cond_op, agg.condition)
                 else:
                     agg.aggfunc_notrans = 'dc'
@@ -71,7 +71,7 @@ class SplunkBackend(SingleTextQueryBackend):
 
     def generate(self, sigmaparser):
         """Method is called for each sigma rule and receives the parsed rule (SigmaParser)"""
-        columns = list()
+        columns = []
         mapped =None
         try:
             for field in sigmaparser.parsedyaml["fields"]:
@@ -84,20 +84,16 @@ class SplunkBackend(SingleTextQueryBackend):
                     raise TypeError("Field mapping must return string or list")
 
             fields = ",".join(str(x) for x in columns)
-            fields = " | table " + fields
+            fields = f' | table {fields}'
 
-        except KeyError:    # no 'fields' attribute
+        except KeyError:# no 'fields' attribute
             mapped = None
-            pass
-
         for parsed in sigmaparser.condparsed:
             query = self.generateQuery(parsed)
             before = self.generateBefore(parsed)
             after = self.generateAfter(parsed)
 
-            result = ""
-            if before is not None:
-                result = before
+            result = before if before is not None else ""
             if query is not None:
                 result += query
             if after is not None:
@@ -146,11 +142,11 @@ class SplunkXMLBackend(SingleTextQueryBackend, MultiRuleOutputMixin):
         return "(" + (" OR ".join(['%s=%s' % (key, self.generateValueNode(item)) for item in value])) + ")"
 
     def generateAggregation(self, agg):
-        if agg == None:
+        if agg is None:
             return ""
         if agg.aggfunc == sigma.parser.condition.SigmaAggregationParser.AGGFUNC_NEAR:
             return ""
-        if agg.groupfield == None:
+        if agg.groupfield is None:
             return " | stats %s(%s) as val | search val %s %s" % (agg.aggfunc_notrans, agg.aggfield or "", agg.cond_op, agg.condition)
         else:
             return " | stats %s(%s) as val by %s | search val %s %s" % (agg.aggfunc_notrans, agg.aggfield or "", agg.groupfield or "", agg.cond_op, agg.condition)
@@ -178,36 +174,38 @@ class CrowdStrikeBackend(SplunkBackend):
 
     def generate(self, sigmaparser):
         lgs = sigmaparser.parsedyaml.get("logsource")
-        if lgs.get("product") == "windows" and (lgs.get("service") == "sysmon" or lgs.get("category") == "process_creation" or lgs.get("service") == "security"):
-            fieldmappings = sigmaparser.config.fieldmappings
-            detections = sigmaparser.definitions
-            all_fields = dict()
-            for det in detections.values():
-                try:
-                    for field, value in det.items():
-                        if "|" in field:
-                            field = field.split("|")[0]
-                        if any([item for item in fieldmappings.keys() if field == item]):
-                            if field == "EventID" and str(value) == str(1) and lgs.get("service") == "sysmon":
-                                all_fields.update(det)
-                            elif field != "EventID":
-                                all_fields.update(det)
-                            else:
-                                raise NotImplementedError("Not supported fields!")
-                        else:
-                            raise NotImplementedError("Not supported fields!")
-                except AttributeError:  # ignore if detection is not a dict
-                    pass
-
-            table_fields = sigmaparser.parsedyaml.get("fields", [])
-            res_table_fields = []
-            for fl in table_fields:
-                if fl in fieldmappings.keys():
-                    res_table_fields.append(fl)
-            sigmaparser.parsedyaml["fields"] = res_table_fields
-            return super().generate(sigmaparser)
-        else:
+        if (
+            lgs.get("product") != "windows"
+            or lgs.get("service") != "sysmon"
+            and lgs.get("category") != "process_creation"
+            and lgs.get("service") != "security"
+        ):
             raise NotImplementedError("Not supported logsources!")
+        fieldmappings = sigmaparser.config.fieldmappings
+        detections = sigmaparser.definitions
+        all_fields = {}
+        for det in detections.values():
+            try:
+                for field, value in det.items():
+                    if "|" in field:
+                        field = field.split("|")[0]
+                    if not any(
+                        item for item in fieldmappings.keys() if field == item
+                    ):
+                        raise NotImplementedError("Not supported fields!")
+                    if field == "EventID" and str(value) == str(1) and lgs.get("service") == "sysmon":
+                        all_fields.update(det)
+                    elif field != "EventID":
+                        all_fields.update(det)
+                    else:
+                        raise NotImplementedError("Not supported fields!")
+            except AttributeError:  # ignore if detection is not a dict
+                pass
+
+        table_fields = sigmaparser.parsedyaml.get("fields", [])
+        res_table_fields = [fl for fl in table_fields if fl in fieldmappings.keys()]
+        sigmaparser.parsedyaml["fields"] = res_table_fields
+        return super().generate(sigmaparser)
 
     def generateMapItemTypedNode(self, fieldname, value):
         return super().generateMapItemTypedNode(fieldname=fieldname, value=value)

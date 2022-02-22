@@ -48,13 +48,11 @@ class QualysBackend(SingleTextQueryBackend):
         self.allowedFieldsList = list(set(fl))
 
     def generateORNode(self, node):
-        new_list = []
-        for val in node:
-            if type(val) == tuple and not(val[0] in self.allowedFieldsList):
-                pass
-                # self.PartialMatchFlag = True
-            else:
-                new_list.append(val)
+        new_list = [
+            val
+            for val in node
+            if type(val) != tuple or val[0] in self.allowedFieldsList
+        ]
 
         generated = [self.generateNode(val) for val in new_list]
         filtered = [g for g in generated if g is not None]
@@ -63,7 +61,7 @@ class QualysBackend(SingleTextQueryBackend):
     def generateANDNode(self, node):
         new_list = []
         for val in node:
-            if type(val) == tuple and not(val[0] in self.allowedFieldsList):
+            if type(val) == tuple and val[0] not in self.allowedFieldsList:
                 self.PartialMatchFlag = True
             else:
                 new_list.append(val)
@@ -103,7 +101,7 @@ class QualysBackend(SingleTextQueryBackend):
 
             if self.PartialMatchFlag == True:
                 raise PartialMatchError(query)
-            elif self.PartialMatchFlag == None:
+            elif self.PartialMatchFlag is None:
                 raise FullMatchError(query)
             else:
                 return query
