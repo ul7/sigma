@@ -121,9 +121,7 @@ class BaseBackend:
             before = self.generateBefore(parsed)
             after = self.generateAfter(parsed)
 
-            result = ""
-            if before is not None:
-                result = before
+            result = before if before is not None else ""
             if query is not None:
                 result += query
             if after is not None:
@@ -260,8 +258,7 @@ class SingleTextQueryBackend(RulenameCommentMixin, BaseBackend, QuoteCharMixin):
 
     def generateANDNode(self, node):
         generated = [ self.generateNode(val) for val in node ]
-        filtered = [ g for g in generated if g is not None ]
-        if filtered:
+        if filtered := [g for g in generated if g is not None]:
             if self.sort_condition_lists:
                 filtered = sorted(filtered)
             return self.andToken.join(filtered)
@@ -270,8 +267,7 @@ class SingleTextQueryBackend(RulenameCommentMixin, BaseBackend, QuoteCharMixin):
 
     def generateORNode(self, node):
         generated = [ self.generateNode(val) for val in node ]
-        filtered = [ g for g in generated if g is not None ]
-        if filtered:
+        if filtered := [g for g in generated if g is not None]:
             if self.sort_condition_lists:
                 filtered = sorted(filtered)
             return self.orToken.join(filtered)
@@ -280,24 +276,17 @@ class SingleTextQueryBackend(RulenameCommentMixin, BaseBackend, QuoteCharMixin):
 
     def generateNOTNode(self, node):
         generated = self.generateNode(node.item)
-        if generated is not None:
-            return self.notToken + generated
-        else:
-            return None
+        return self.notToken + generated if generated is not None else None
 
     def generateSubexpressionNode(self, node):
         generated = self.generateNode(node.items)
-        if 'len'in dir(node.items): # fix the "TypeError: object of type 'NodeSubexpression' has no len()"
-            if len(node.items) == 1:
-                # A sub expression with length 1 is not a proper sub expression, no self.subExpression required
-                return generated
-        if generated:
-            return self.subExpression % generated
-        else:
-            return None
+        if 'len' in dir(node.items) and len(node.items) == 1:
+            # A sub expression with length 1 is not a proper sub expression, no self.subExpression required
+            return generated
+        return self.subExpression % generated if generated else None
 
     def generateListNode(self, node):
-        if not set([type(value) for value in node]).issubset({str, int}):
+        if not {type(value) for value in node}.issubset({str, int}):
             raise TypeError("List values must be strings or numbers")
         result = [self.generateNode(value) for value in node]
         if len(result) == 1:

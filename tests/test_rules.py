@@ -30,20 +30,21 @@ class TestRules(unittest.TestCase):
 
     def get_rule_part(self, file_path:str, part_name:str):
         yaml_dicts = self.get_rule_yaml(file_path)
-        for yaml_part in yaml_dicts:
-            if part_name in yaml_part.keys():
-                return yaml_part[part_name]
-
-        return None
+        return next(
+            (
+                yaml_part[part_name]
+                for yaml_part in yaml_dicts
+                if part_name in yaml_part.keys()
+            ),
+            None,
+        )
 
     def get_rule_yaml(self, file_path:str) -> dict:
         data = []
 
         with open(file_path,encoding='utf-8') as f:
             yaml_parts = yaml.safe_load_all(f)
-            for part in yaml_parts:
-                data.append(part)
-
+            data.extend(iter(yaml_parts))
         return data
 
     # Tests
@@ -66,9 +67,9 @@ class TestRules(unittest.TestCase):
         for file in self.yield_next_rule_file_path(self.path_to_rules):
             with open(file, 'r',encoding='utf-8') as fh:
                 file_data = fh.read()
-                for tm in self.TRADE_MARKS:
-                    if tm in file_data:
-                        files_with_legal_issues.append(file)
+                files_with_legal_issues.extend(
+                    file for tm in self.TRADE_MARKS if tm in file_data
+                )
 
         self.assertEqual(files_with_legal_issues, [], Fore.RED + 
                         "There are rule files which contains a trademark or reference that doesn't comply with the respective trademark requirements - please remove the trademark to avoid legal issues")
@@ -77,10 +78,9 @@ class TestRules(unittest.TestCase):
         files_with_incorrect_tags = []
         tags_pattern = re.compile(r"cve\.\d+\.\d+|attack\.t\d+\.*\d*|attack\.[a-z_]+|car\.\d{4}-\d{2}-\d{3}")
         for file in self.yield_next_rule_file_path(self.path_to_rules):
-            tags = self.get_rule_part(file_path=file, part_name="tags")
-            if tags:
+            if tags := self.get_rule_part(file_path=file, part_name="tags"):
                 for tag in tags:
-                    if tags_pattern.match(tag) == None:
+                    if tags_pattern.match(tag) is None:
                         print(Fore.RED + "Rule {} has the invalid tag <{}>".format(file, tag))
                         files_with_incorrect_tags.append(file)
 
@@ -91,8 +91,7 @@ class TestRules(unittest.TestCase):
         files_with_incorrect_mitre_tags = []
 
         for file in self.yield_next_rule_file_path(self.path_to_rules):
-            tags = self.get_rule_part(file_path=file, part_name="tags")
-            if tags:
+            if tags := self.get_rule_part(file_path=file, part_name="tags"):
                 for tag in tags:
                     if tag not in MITRE_ALL and tag.startswith("attack."):
                         print(Fore.RED + "Rule {} has the following incorrect tag {}".format(file, tag))
@@ -105,8 +104,7 @@ class TestRules(unittest.TestCase):
         files_with_incorrect_mitre_tags = []
 
         for file in self.yield_next_rule_file_path(self.path_to_rules):
-            tags = self.get_rule_part(file_path=file, part_name="tags")
-            if tags:
+            if tags := self.get_rule_part(file_path=file, part_name="tags"):
                 known_tags = []
                 for tag in tags:
                     if tag in known_tags:
@@ -295,8 +293,8 @@ class TestRules(unittest.TestCase):
                 faulty_rules.append(file)
             elif len(id) != 36:
                 print(Fore.YELLOW + "Rule {} has a malformed 'id' (not 36 chars).".format(file))
-                faulty_rules.append(file)                
-            elif id in dict_id.keys():
+                faulty_rules.append(file)
+            elif id in dict_id:
                 print(Fore.YELLOW + "Rule {} has the same 'id' than {} must be unique.".format(file,dict_id[id]))
                 faulty_rules.append(file)
             else:
@@ -314,8 +312,9 @@ class TestRules(unittest.TestCase):
             "renamed",
             ]
         for file in self.yield_next_rule_file_path(self.path_to_rules):
-            related_lst = self.get_rule_part(file_path=file, part_name="related")
-            if related_lst:
+            if related_lst := self.get_rule_part(
+                file_path=file, part_name="related"
+            ):
                 # it exists but isn't a list
                 if not isinstance(related_lst, list):
                     print(Fore.YELLOW + "Rule {} has a 'related' field that isn't a list.".format(file))
@@ -326,10 +325,10 @@ class TestRules(unittest.TestCase):
                     for ref in related_lst:
                         id_str = ref['id']
                         type_str = ref['type']
-                        if not type_str in valid_type:
-                           type_ok = False
+                        if type_str not in valid_type:
+                            type_ok = False
                     #Only add one time if many bad type in the same file
-                    if type_ok == False:
+                    if not type_ok:
                         print(Fore.YELLOW + "Rule {} has a 'related/type' invalid value.".format(file))
                         faulty_rules.append(file)
 
@@ -339,16 +338,13 @@ class TestRules(unittest.TestCase):
     def test_sysmon_rule_without_eventid(self):
         faulty_rules = []
         for file in self.yield_next_rule_file_path(self.path_to_rules):
-            logsource = self.get_rule_part(file_path=file, part_name="logsource")
-            if logsource:
+            if logsource := self.get_rule_part(
+                file_path=file, part_name="logsource"
+            ):
                 service = logsource.get('service', '')
                 if service.lower() == 'sysmon':
                     with open(file,encoding='utf-8') as f:
-                        found = False
-                        for line in f:
-                            if re.search(r'.*EventID:.*$', line):  # might be on a single line or in multiple lines
-                                found = True
-                                break
+                        found = any(re.search(r'.*EventID:.*$', line) for line in f)
                         if not found:
                             faulty_rules.append(file)
 
@@ -395,8 +391,9 @@ class TestRules(unittest.TestCase):
     def test_optional_date_modified(self):
         faulty_rules = []
         for file in self.yield_next_rule_file_path(self.path_to_rules):
-            modifiedfield = self.get_rule_part(file_path=file, part_name="modified")
-            if modifiedfield:
+            if modifiedfield := self.get_rule_part(
+                file_path=file, part_name="modified"
+            ):
                 if not isinstance(modifiedfield, str):
                     print(Fore.YELLOW + "Rule {} has a malformed 'modified' (should be YYYY/MM/DD).".format(file))
                     faulty_rules.append(file)
@@ -420,15 +417,16 @@ class TestRules(unittest.TestCase):
             "unsupported"
             ]
         for file in self.yield_next_rule_file_path(self.path_to_rules):
-            status_str = self.get_rule_part(file_path=file, part_name="status")
-            if status_str:
-                if not status_str in valid_status:
+            if status_str := self.get_rule_part(
+                file_path=file, part_name="status"
+            ):
+                if status_str not in valid_status:
                     print(Fore.YELLOW + "Rule {} has a invalid 'status' (check wiki).".format(file))
-                    faulty_rules.append(file) 
+                    faulty_rules.append(file)
                 elif status_str == "unsupported":
                     print(Fore.YELLOW + "Rule {} has the unsupported 'status', can not be in rules directory".format(file))
                     faulty_rules.append(file)
-                    
+
         self.assertEqual(faulty_rules, [], Fore.RED +
                          "There are rules with malformed 'status' fields. (check https://github.com/SigmaHQ/sigma/wiki/Specification)")
 
@@ -446,9 +444,9 @@ class TestRules(unittest.TestCase):
             if not level_str:
                 print(Fore.YELLOW + "Rule {} has no field 'level'.".format(file))
                 faulty_rules.append(file)
-            elif not level_str in valid_level:
-                    print(Fore.YELLOW + "Rule {} has a invalid 'level' (check wiki).".format(file))
-                    faulty_rules.append(file)
+            elif level_str not in valid_level:
+                print(Fore.YELLOW + "Rule {} has a invalid 'level' (check wiki).".format(file))
+                faulty_rules.append(file)
 
         self.assertEqual(faulty_rules, [], Fore.RED +
                          "There are rules with missing or malformed 'level' fields. (check https://github.com/SigmaHQ/sigma/wiki/Specification)")
@@ -456,8 +454,9 @@ class TestRules(unittest.TestCase):
     def test_optional_fields(self):
         faulty_rules = []
         for file in self.yield_next_rule_file_path(self.path_to_rules):
-            fields_str = self.get_rule_part(file_path=file, part_name="fields")
-            if fields_str:
+            if fields_str := self.get_rule_part(
+                file_path=file, part_name="fields"
+            ):
                 # it exists but isn't a list
                 if not isinstance(fields_str, list):
                     print(Fore.YELLOW + "Rule {} has a 'fields' field that isn't a list.".format(file))
@@ -469,8 +468,9 @@ class TestRules(unittest.TestCase):
     def test_optional_falsepositives(self):
         faulty_rules = []
         for file in self.yield_next_rule_file_path(self.path_to_rules):
-            falsepositives_str = self.get_rule_part(file_path=file, part_name="falsepositives")
-            if falsepositives_str:
+            if falsepositives_str := self.get_rule_part(
+                file_path=file, part_name="falsepositives"
+            ):
                 # it exists but isn't a list
                 if not isinstance(falsepositives_str, list):
                     print(Fore.YELLOW + "Rule {} has a 'falsepositives' field that isn't a list.".format(file))
@@ -483,8 +483,9 @@ class TestRules(unittest.TestCase):
     def test_optional_author(self):
         faulty_rules = []
         for file in self.yield_next_rule_file_path(self.path_to_rules):
-            author_str = self.get_rule_part(file_path=file, part_name="author")
-            if author_str:
+            if author_str := self.get_rule_part(
+                file_path=file, part_name="author"
+            ):
                 # it exists but isn't a string
                 if not isinstance(author_str, str):
                     print(Fore.YELLOW + "Rule {} has a 'author' field that isn't a string.".format(file))
@@ -496,8 +497,9 @@ class TestRules(unittest.TestCase):
     def test_optional_license(self):
         faulty_rules = []
         for file in self.yield_next_rule_file_path(self.path_to_rules):
-            license_str = self.get_rule_part(file_path=file, part_name="license")
-            if license_str:
+            if license_str := self.get_rule_part(
+                file_path=file, part_name="license"
+            ):
                 if not isinstance(license_str, str):
                     print(Fore.YELLOW + "Rule {} has a malformed 'license' (has to be a string).".format(file))
                     faulty_rules.append(file)
@@ -514,13 +516,12 @@ class TestRules(unittest.TestCase):
             "RED",
             ]
         for file in self.yield_next_rule_file_path(self.path_to_rules):
-            tlp_str = self.get_rule_part(file_path=file, part_name="tlp")
-            if tlp_str:
+            if tlp_str := self.get_rule_part(file_path=file, part_name="tlp"):
                 # it exists but isn't a string
                 if not isinstance(tlp_str, str):
                     print(Fore.YELLOW + "Rule {} has a 'tlp' field that isn't a string.".format(file))
                     faulty_rules.append(file)
-                elif not tlp_str.upper() in valid_tlp:
+                elif tlp_str.upper() not in valid_tlp:
                     print(Fore.YELLOW + "Rule {} has a 'tlp' field with not valid value.".format(file))
                     faulty_rules.append(file)
 
@@ -530,8 +531,7 @@ class TestRules(unittest.TestCase):
     def test_optional_target(self):
         faulty_rules = []
         for file in self.yield_next_rule_file_path(self.path_to_rules):
-            target = self.get_rule_part(file_path=file, part_name="target")
-            if target:
+            if target := self.get_rule_part(file_path=file, part_name="target"):
                 # it exists but isn't a list
                 if not isinstance(target, list):
                     print(Fore.YELLOW + "Rule {} has a 'target' field that isn't a list.".format(file))
@@ -543,12 +543,9 @@ class TestRules(unittest.TestCase):
     def test_references(self):
         faulty_rules = []
         for file in self.yield_next_rule_file_path(self.path_to_rules):
-            references = self.get_rule_part(file_path=file, part_name="references")
-            # Reference field doesn't exist
-            # if not references:
-                # print(Fore.YELLOW + "Rule {} has no field 'references'.".format(file))
-                # faulty_rules.append(file)
-            if references:
+            if references := self.get_rule_part(
+                file_path=file, part_name="references"
+            ):
                 # it exists but isn't a list
                 if not isinstance(references, list):
                     print(Fore.YELLOW + "Rule {} has a references field that isn't a list.".format(file))
@@ -576,7 +573,7 @@ class TestRules(unittest.TestCase):
             filename = os.path.basename(file)
             if filename in name_lst:
                 print(Fore.YELLOW + "Rule {} is a duplicate file name.".format(file))
-                faulty_rules.append(file)        
+                faulty_rules.append(file)
             elif filename[-4:] != ".yml":
                 print(Fore.YELLOW + "Rule {} has a invalid extension (.yml).".format(file))
                 faulty_rules.append(file)
@@ -586,7 +583,7 @@ class TestRules(unittest.TestCase):
             elif len(filename) < 14:
                 print(Fore.YELLOW + "Rule {} has a file name too sort <10.".format(file))
                 faulty_rules.append(file)
-            elif filename_pattern.match(filename) == None or not '_' in filename:
+            elif filename_pattern.match(filename) is None or '_' not in filename:
                 print(Fore.YELLOW + "Rule {} has a file name that doesn't match our standard.".format(file))
                 faulty_rules.append(file)
             name_lst.append(filename)
@@ -630,11 +627,15 @@ class TestRules(unittest.TestCase):
             if title.startswith("Detects "):
                 print(Fore.RED + "Rule {} has a title that starts with 'Detects'".format(file))
                 faulty_rules.append(file)
-            wrong_casing = []
-            for word in title.split(" "):
-                if word.islower() and not word.lower() in allowed_lowercase_words and not "." in word and not "/" in word and not word[0].isdigit():
-                    wrong_casing.append(word)
-            if len(wrong_casing) > 0:
+            if wrong_casing := [
+                word
+                for word in title.split(" ")
+                if word.islower()
+                and word.lower() not in allowed_lowercase_words
+                and "." not in word
+                and "/" not in word
+                and not word[0].isdigit()
+            ]:
                 print(Fore.RED + "Rule {} has a title that has not title capitalization. Words: '{}'".format(file, ", ".join(wrong_casing)))
                 faulty_rules.append(file)
 
@@ -673,14 +674,18 @@ class TestRules(unittest.TestCase):
     def test_selection_list_one_value(self):
         faulty_rules = []
         for file in self.yield_next_rule_file_path(self.path_to_rules):
-             detection = self.get_rule_part(file_path=file, part_name="detection")
-             if detection:
-                 valid = True
-                 for key in detection:
-                     if isinstance(detection[key],list):
-                         if len(detection[key]) == 1 and not isinstance(detection[key][0],str): #rule with only list of Keywords term
-                            print(Fore.RED + "Rule {} has the selection ({}) with a list of only 1 element in detection".format(file, key))
-                            valid = False
+            if detection := self.get_rule_part(
+                file_path=file, part_name="detection"
+            ):
+                valid = True
+                for key in detection:
+                    if (
+                        isinstance(detection[key], list)
+                        and len(detection[key]) == 1
+                        and not isinstance(detection[key][0], str)
+                    ):
+                        print(Fore.RED + "Rule {} has the selection ({}) with a list of only 1 element in detection".format(file, key))
+                        valid = False
   #deactivate because more than 170 rules have to be corrected
   #                  if isinstance(detection[key],dict):
   #                      for sub_key in detection[key]:
@@ -688,32 +693,33 @@ class TestRules(unittest.TestCase):
   #                              if len(detection[key][sub_key]) == 1:
   #                                  print (Fore.RED + "Rule {} has the selection ({}/{}) with a list of only 1 value in detection".format(file, key, sub_key))
   #                                  #valid = False
-                 if not valid:
-                     faulty_rules.append(file)
-   
+                if not valid:
+                    faulty_rules.append(file)
+
         self.assertEqual(faulty_rules, [], Fore.RED + "There are rules using list with only 1 element")
 
     def test_condition_operator_casesensitive(self):
         faulty_rules = []
         for file in self.yield_next_rule_file_path(self.path_to_rules):
-             detection = self.get_rule_part(file_path=file, part_name="detection")
-             if detection:
-                 valid = True
-                 if isinstance(detection["condition"],str):
-                     param = detection["condition"].split(' ')
-                     for item in param:
-                        if item.lower() == 'or' and not item == 'or':
+            if detection := self.get_rule_part(
+                file_path=file, part_name="detection"
+            ):
+                valid = True
+                if isinstance(detection["condition"],str):
+                    param = detection["condition"].split(' ')
+                    for item in param:
+                        if item.lower() == 'or' and item != 'or':
                             valid = False
-                        elif item.lower() == 'and' and not item == 'and':
+                        elif item.lower() == 'and' and item != 'and':
                             valid = False
-                        elif item.lower() == 'not' and not item == 'not':
-                            valid = False   
-                        elif item.lower() == 'of' and not item == 'of':
-                            valid = False                            
-                     if not valid:
-                         print(Fore.RED + "Rule {} has a invalid condition '{}' : 'or','and','not','of' are lowercase".format(file,detection["condition"]))
-                         faulty_rules.append(file)
-                         
+                        elif item.lower() == 'not' and item != 'not':
+                            valid = False
+                        elif item.lower() == 'of' and item != 'of':
+                            valid = False
+                    if not valid:
+                        print(Fore.RED + "Rule {} has a invalid condition '{}' : 'or','and','not','of' are lowercase".format(file,detection["condition"]))
+                        faulty_rules.append(file)
+
         self.assertEqual(faulty_rules, [], Fore.RED + "There are rules using condition whitout lowercase operator")
 
 def get_mitre_data():
@@ -732,9 +738,12 @@ def get_mitre_data():
     enterprise_techniques = lift.get_enterprise_techniques()
     for t in enterprise_techniques:
         MITRE_TECHNIQUE_NAMES.append(t['name'].lower().replace(' ', '_').replace('-', '_'))
-        for r in t.external_references:
-            if 'external_id' in r:
-                MITRE_TECHNIQUES.append(r['external_id'].lower())
+        MITRE_TECHNIQUES.extend(
+            r['external_id'].lower()
+            for r in t.external_references
+            if 'external_id' in r
+        )
+
         if 'kill_chain_phases' in t:
             for kc in t['kill_chain_phases']:
                 if 'phase_name' in kc:
@@ -742,26 +751,41 @@ def get_mitre_data():
     # Tools / Malware
     enterprise_tools = lift.get_enterprise_tools()
     for t in enterprise_tools:
-        for r in t.external_references:
-            if 'external_id' in r:
-                MITRE_TOOLS.append(r['external_id'].lower())
+        MITRE_TOOLS.extend(
+            r['external_id'].lower()
+            for r in t.external_references
+            if 'external_id' in r
+        )
+
     enterprise_malware = lift.get_enterprise_malware()
     for m in enterprise_malware:
-        for r in m.external_references:
-            if 'external_id' in r:
-                MITRE_TOOLS.append(r['external_id'].lower())
+        MITRE_TOOLS.extend(
+            r['external_id'].lower()
+            for r in m.external_references
+            if 'external_id' in r
+        )
+
     # Groups
     enterprise_groups = lift.get_enterprise_groups()
     for g in enterprise_groups:
-        for r in g.external_references:
-            if 'external_id' in r:
-                MITRE_GROUPS.append(r['external_id'].lower())
+        MITRE_GROUPS.extend(
+            r['external_id'].lower()
+            for r in g.external_references
+            if 'external_id' in r
+        )
 
     # Debugging 
     print("MITRE ATT&CK LIST LENGTHS: %d %d %d %d %d" % (len(MITRE_TECHNIQUES), len(MITRE_TECHNIQUE_NAMES), len(list(MITRE_PHASE_NAMES)), len(MITRE_GROUPS), len(MITRE_TOOLS)))
 
     # Combine all IDs to a big tag list
-    return ["attack." + item for item in MITRE_TECHNIQUES + MITRE_TECHNIQUE_NAMES + list(MITRE_PHASE_NAMES) + MITRE_GROUPS + MITRE_TOOLS]
+    return [
+        f'attack.{item}'
+        for item in MITRE_TECHNIQUES
+        + MITRE_TECHNIQUE_NAMES
+        + list(MITRE_PHASE_NAMES)
+        + MITRE_GROUPS
+        + MITRE_TOOLS
+    ]
 
 
 if __name__ == "__main__":

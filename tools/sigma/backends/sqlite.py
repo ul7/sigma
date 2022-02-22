@@ -50,8 +50,7 @@ class SQLiteBackend(SQLBackend):
             return self.generateFTS(fts)
 
         generated = [self.generateNode(val) for val in node]
-        filtered = [g for g in generated if g is not None]
-        if filtered:
+        if filtered := [g for g in generated if g is not None]:
             return self.andToken.join(filtered)
         else:
             return None
@@ -64,8 +63,7 @@ class SQLiteBackend(SQLBackend):
             return self.generateFTS(fts)
 
         generated = [self.generateNode(val) for val in node]
-        filtered = [g for g in generated if g is not None]
-        if filtered:
+        if filtered := [g for g in generated if g is not None]:
             return self.orToken.join(filtered)
         else:
             return None

@@ -26,7 +26,7 @@ COND_NULL = 4
 
 
 # Debugging code
-def dumpNode(node, indent=''):   # pragma: no cover
+def dumpNode(node, indent=''):    # pragma: no cover
     """
     Recursively print the AST rooted at *node* for debugging.
     """
@@ -34,10 +34,10 @@ def dumpNode(node, indent=''):   # pragma: no cover
         print("%s%s<%s>" % (indent, type(node).__name__,
                             type(node.items).__name__))
         if type(node.items) != list:
-            dumpNode(node.items, indent + '  ')
+            dumpNode(node.items, f'{indent}  ')
         else:
             for item in node.items:
-                dumpNode(item, indent + '  ')
+                dumpNode(item, f'{indent}  ')
     else:
         print("%s%s=%s" % (indent, type(node).__name__,
                                    repr(node)))
@@ -127,14 +127,13 @@ class SigmaConditionTokenizer:
             ]
 
     def __init__(self, condition):
-        if type(condition) == str:          # String that is parsed
-            self.tokens = list()
+        if type(condition) == str:      # String that is parsed
+            self.tokens = []
             pos = 1
 
             while len(condition) > 0:
                 for tokendef in self.tokendefs:     # iterate over defined tokens and try to recognize the next one
-                    match = tokendef[1].match(condition)
-                    if match:
+                    if match := tokendef[1].match(condition):
                         if tokendef[0] != None:
                             self.tokens.append(SigmaConditionToken(tokendef, match, pos + match.start()))
                         pos += match.end()      # increase position and cut matched prefix from condition
@@ -195,8 +194,8 @@ class ConditionBase(ParseTreeNode):
         if type(self) == ConditionBase:
             raise NotImplementedError("ConditionBase is no usable class")
 
-        if sigma == None and op == None and len(args) == 0:    # no parameters given - initialize empty
-            self.items = list()
+        if sigma is None and op is None and len(args) == 0:# no parameters given - initialize empty
+            self.items = []
         else:       # called by parser, use given values
             self.items = args
 
@@ -215,8 +214,8 @@ class ConditionBaseOneItem(ConditionBase):
         if type(self) == ConditionBaseOneItem:
             raise NotImplementedError("ConditionBaseOneItem is no usable class")
 
-        if sigma == None and op == None and val == None:    # no parameters given - initialize empty
-            self.items = list()
+        if sigma is None and op is None and val is None:# no parameters given - initialize empty
+            self.items = []
         else:       # called by parser, use given values
             self.items = [ val ]
 
@@ -404,16 +403,13 @@ class SigmaConditionOptimizer:
                 return self._optimizeNode(node, changes=True)
 
             # OR(AND(X, ...), AND(X, ...))  =>  AND(X, OR(AND(...), AND(...)))
-            if type(node) == ConditionOR:
-                othertype = ConditionAND
-            else:
-                othertype = ConditionOR
+            othertype = ConditionAND if type(node) == ConditionOR else ConditionOR
             if all(type(child) == othertype for child in node.items):
-                promoted = []
-                for cand in node.items[0]:
-                    if all(cand in child for child in node.items[1:]):
-                        promoted.append(cand)
-                if len(promoted) > 0:
+                if promoted := [
+                    cand
+                    for cand in node.items[0]
+                    if all(cand in child for child in node.items[1:])
+                ]:
                     for child in node.items:
                         for cand in promoted:
                             if cand in child.items:
@@ -423,7 +419,7 @@ class SigmaConditionOptimizer:
                     newnode.add(node)
                     return self._optimizeNode(newnode, changes=True)
 
-            # fallthrough
+                # fallthrough
 
         elif type(node) == ConditionNOT:
             assert(len(node.items) == 1)
@@ -700,8 +696,8 @@ class SigmaAggregationParser(SimpleParser):
 
     def init_near_parsing(self, name):
         """Initialize data structures for 'near" aggregation operator parsing"""
-        self.include = list()
-        self.exclude = list()
+        self.include = []
+        self.exclude = []
         self.current = self.include
         return self.trans_aggfunc(name)
 

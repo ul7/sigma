@@ -35,7 +35,7 @@ class GrepBackend(BaseBackend, QuoteCharMixin):
         return re.sub("\\*", ".*", val)
 
     def generateORNode(self, node):
-        return "(?:%s)" % "|".join([".*" + self.generateNode(val) for val in node])
+        return "(?:%s)" % "|".join([f'.*{self.generateNode(val)}' for val in node])
 
     def generateANDNode(self, node):
         return "".join(["(?=.*%s)" % self.generateNode(val) for val in node])
@@ -47,7 +47,7 @@ class GrepBackend(BaseBackend, QuoteCharMixin):
         return "(?:.*%s)" % self.generateNode(node.items)
 
     def generateListNode(self, node):
-        if not set([type(value) for value in node]).issubset({str, int}):
+        if not {type(value) for value in node}.issubset({str, int}):
             raise TypeError("List values must be strings or numbers")
         return self.generateORNode(node)
 

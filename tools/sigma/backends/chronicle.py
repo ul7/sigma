@@ -58,11 +58,15 @@ class ChronicleBackend(SingleTextQueryBackend):
     def parseTitle(self, title):
         new_title = re.sub(re.compile('[()*:;+!,\[\].?"-/]'), "", title.lower())
         new_title = re.sub(re.compile('\s'), "_", new_title.lower())
-        index = 0
-        for i, title_char in enumerate(new_title):
-            if not title_char.isdigit():
-                index = i
-                break
+        index = next(
+            (
+                i
+                for i, title_char in enumerate(new_title)
+                if not title_char.isdigit()
+            ),
+            0,
+        )
+
         new_title = new_title[index:]
         new_title = new_title.strip("_")
         return new_title
@@ -121,10 +125,7 @@ class ChronicleBackend(SingleTextQueryBackend):
             val = re.compile(r'([+.?])').sub("\\\\\g<1>", val)
             val = val.replace("*", ".*")
             return f"re.regex({transformed_fieldname}, `{val}`)"
-        if val and isinstance(val, str):
-            return self.mapExpression % (transformed_fieldname, self.generateNode(val))
-        else:
-            return self.mapExpression % (transformed_fieldname, self.generateNode(val))
+        return self.mapExpression % (transformed_fieldname, self.generateNode(val))
 
     def generateMapItemListNode(self, fieldname, value):
         list_query = []
@@ -138,10 +139,7 @@ class ChronicleBackend(SingleTextQueryBackend):
     def generate(self, sigmaparser):
         detection = sigmaparser.parsedyaml.get("detection")
         condition_name = [item for item in detection.keys() if item not in ("condition", "keywords")]
-        if any(condition_name):
-            self.condition_name = condition_name[0]
-        else:
-            self.condition_name = "event"
+        self.condition_name = condition_name[0] if any(condition_name) else "event"
         self.author = sigmaparser.parsedyaml.get("author")
         self.title = sigmaparser.parsedyaml.get("title")
         description = "{} Author: {}.".format(sigmaparser.parsedyaml.get("description"), self.author)
@@ -153,10 +151,13 @@ class ChronicleBackend(SingleTextQueryBackend):
         if not any(references):
             references = sigmaparser.parsedyaml.get("references", [])
         self.references = references
-        self.logsource = sigmaparser.parsedyaml.get("logsource") if sigmaparser.parsedyaml.get("logsource") else sigmaparser.parsedyaml.get("logsources", {})
+        self.logsource = sigmaparser.parsedyaml.get(
+            "logsource"
+        ) or sigmaparser.parsedyaml.get("logsources", {})
+
         self.tags = sigmaparser.parsedyaml.get("tags")
+        aggregation = None
         for parsed in sigmaparser.condparsed:
-            aggregation = None
             translate = self.generateQuery(parsed)
             self.condition = "${}".format(self.condition_name)
             if parsed.parsedAgg:
@@ -164,17 +165,19 @@ class ChronicleBackend(SingleTextQueryBackend):
             return self.createFinalRule(body=translate)
 
     def generateQuery(self, parsed):
-        result = self.generateNode(parsed.parsedSearch)
-        return result
+        return self.generateNode(parsed.parsedSearch)
 
     def generateAggregation(self, agg, body):
         if agg is None:
             return ""
         if agg.aggfunc == SigmaAggregationParser.AGGFUNC_NEAR:
             raise NotImplementedError(
-                "The 'near' aggregation operator is not "
-                + f"implemented for the %s backend" % self.identifier
+                (
+                    "The 'near' aggregation operator is not "
+                    + 'implemented for the %s backend' % self.identifier
+                )
             )
+
         if agg.aggfunc_notrans != 'count' and agg.aggfield is None:
             raise NotSupportedError(
                 "The '%s' aggregation operator " % agg.aggfunc_notrans

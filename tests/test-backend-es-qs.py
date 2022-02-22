@@ -73,7 +73,7 @@ async def run_sigmac():
 
 # Generated query checker loop
 async def check_queries():
-    failed = list()
+    failed = []
     print("# Waiting for queries")
     while True:
         rule, query = await queries.get()

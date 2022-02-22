@@ -54,10 +54,7 @@ class CSharpBackend(SingleTextQueryBackend):
             before = self.generateBefore(parsed)
             after = self.generateAfter(parsed)
 
-            result = ""
-
-            if before is not None:
-                result = before
+            result = before if before is not None else ""
             if query is not None:
                 result += query
             if after is not None:
@@ -132,26 +129,25 @@ class CSharpBackend(SingleTextQueryBackend):
             raise TypeError("Backend does not support map values of type " + str(type(value)))
 
     def generateMapItemListNode(self, key, value):
-        itemslist = list()
+        itemslist = []
         for item in value:
-          
+
             if key in ("EventID","x.Key"):               
                 key = "x.Key"
                 itemslist.append(self.mapExpression % (key, self.generateValueNode(item, True)))
-            
+
             elif (type(item) == str and "\"" in item) or (type(item) == str and "*" in item) or (type(item) == str and "?" in item):
                 item = item.replace("\"", "\"\"").replace("*", ".*").replace("?","\?")
                 itemslist.append("new Regex(@%s, RegexOptions.IgnoreCase).IsMatch(x.Value)" % (self.generateValueNode(key +".*"+ item, True)))                    
 
             else:
                 itemslist.append("new Regex(@%s, RegexOptions.IgnoreCase).IsMatch(x.Value)" % (self.generateValueNode(key +".*"+ item, True)))  
-         
+
         return '('+" | ".join(itemslist)+')'
 
     def generateANDNode(self, node):
         generated = [ self.generateNode(val) for val in node ]
-        filtered = [ g for g in generated if g is not None ]
-        if filtered:
+        if filtered := [g for g in generated if g is not None]:
             return self.andToken.join(filtered)
         else:
             return None

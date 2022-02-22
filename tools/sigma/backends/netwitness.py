@@ -65,9 +65,9 @@ class NetWitnessBackend(SingleTextQueryBackend):
             raise TypeError("Backend does not support map values of type " + str(type(value)))
 
     def generateMapItemListNode(self, key, value):
-        equallist = list()
-        containlist = list()
-        regexlist = list()
+        equallist = []
+        containlist = []
+        regexlist = []
         for item in value:
             if type(item) == str and "*" in item[1:-1]:
                 item = re.sub('([".^$]|\\\\(?![*?]))', '\\\\\g<1>', item)
@@ -80,15 +80,14 @@ class NetWitnessBackend(SingleTextQueryBackend):
                 containlist.append(self.generateValueNode(item))
             else:
                 equallist.append(self.generateValueNode(item))
-        fmtitems = list()
+        fmtitems = []
         if equallist:
             fmtitems.append("%s = %s" % (key, ", ".join(equallist)))
         if containlist:
             fmtitems.append("%s contains %s" % (key, ", ".join(containlist)))
         if regexlist:
             fmtitems.append("%s regex %s" % (key, ", ".join(regexlist)))
-        fmtquery = "("+" || ".join(filter(None, fmtitems))+")"
-        return fmtquery
+        return "("+" || ".join(filter(None, fmtitems))+")"
 
     def generateValueNode(self, node):
         return self.valueExpression % (str(node))
@@ -99,9 +98,7 @@ class NetWitnessBackend(SingleTextQueryBackend):
             if k.startswith('keyword'):
                 raise NotImplementedError("Backend does not support keywords")
         for parsed in sigmaparser.condparsed:
-            query = self.generateQuery(parsed, sigmaparser)
-            return query
+            return self.generateQuery(parsed, sigmaparser)
 
     def generateQuery(self, parsed, sigmaparser):
-        result = self.generateNode(parsed.parsedSearch)
-        return result
+        return self.generateNode(parsed.parsedSearch)

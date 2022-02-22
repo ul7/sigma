@@ -52,12 +52,10 @@ class SimpleParser:
                 raise SigmaParseError("Unexpected token %s at %d in aggregation expression" % (str(token), token.pos)) from e
 
             value = token.matched
-            trans_value = value
-            if rule[1] != None:
-                trans_value = getattr(self, rule[1])(value)
+            trans_value = getattr(self, rule[1])(value) if rule[1] != None else value
             if rule[0] != None:
                 setattr(self, rule[0], trans_value)
-                setattr(self, rule[0] + "_notrans", value)
+                setattr(self, f'{rule[0]}_notrans', value)
             if rule[2] != None:
                 self.state = rule[2]
         if self.state not in self.finalstates:
